@@ -1334,6 +1334,9 @@ PrintTOCSummary(Archive *AHX)
 		case archDirectory:
 			fmtName = "DIRECTORY";
 			break;
+		case archSplit:
+			fmtName = "SPLIT";
+			break;
 		case archTar:
 			fmtName = "TAR";
 			break;
@@ -2267,23 +2270,71 @@ _discoverArchiveFormat(ArchiveHandle *AH)
 		 */
 		if (stat(AH->fSpec, &st) == 0 && S_ISDIR(st.st_mode))
 		{
-			AH->format = archDirectory;
+			char		tocname[MAXPGPATH];
+			FILE	   *tocfile = NULL;
+
+			/* Look for toc.dat file */
+			snprintf(tocname, sizeof(tocname), "%s/toc.dat", AH->fSpec);
 			if (_fileExistsInDirectory(AH->fSpec, "toc.dat"))
-				return AH->format;
+				tocfile = fopen(tocname, PG_BINARY_R);
 #ifdef HAVE_LIBZ
-			if (_fileExistsInDirectory(AH->fSpec, "toc.dat.gz"))
+			else if (_fileExistsInDirectory(AH->fSpec, "toc.dat.gz"))
+			{
+				snprintf(tocname, sizeof(tocname), "%s/toc.dat.gz", AH->fSpec);
+				/* For compressed files, we'd need to decompress to read the header */
+				/* For now, assume directory format for compressed toc files */
+				AH->format = archDirectory;
 				return AH->format;
+			}
 #endif
 #ifdef USE_LZ4
-			if (_fileExistsInDirectory(AH->fSpec, "toc.dat.lz4"))
+			else if (_fileExistsInDirectory(AH->fSpec, "toc.dat.lz4"))
+			{
+				/* For compressed files, assume directory format */
+				AH->format = archDirectory;
 				return AH->format;
+			}
 #endif
 #ifdef USE_ZSTD
-			if (_fileExistsInDirectory(AH->fSpec, "toc.dat.zst"))
+			else if (_fileExistsInDirectory(AH->fSpec, "toc.dat.zst"))
+			{
+				/* For compressed files, assume directory format */
+				AH->format = archDirectory;
 				return AH->format;
+			}
 #endif
-			pg_fatal("directory \"%s\" does not appear to be a valid archive (\"toc.dat\" does not exist)",
-					 AH->fSpec);
+			else
+				pg_fatal("directory \"%s\" does not appear to be a valid archive (\"toc.dat\" does not exist)",
+						 AH->fSpec);
+
+			if (tocfile)
+			{
+				/* Read the header to determine if it's directory or split format */
+				char		header[11];
+
+				if (fread(header, 1, 11, tocfile) == 11 &&
+					strncmp(header, "PGDMP", 5) == 0)
+				{
+					/* Format byte is at position 10 in the header */
+					int fmt = header[10];
+
+					if (fmt == archDirectory)
+						AH->format = archDirectory;
+					else if (fmt == archSplit)
+						AH->format = archSplit;
+					else
+						pg_fatal("unrecognized archive format (%d) in directory \"%s\"",
+								 fmt, AH->fSpec);
+				}
+				else
+				{
+					pg_fatal("directory \"%s\" does not appear to be a valid archive (bad header)",
+							 AH->fSpec);
+				}
+
+				fclose(tocfile);
+				return AH->format;
+			}
 			fh = NULL;			/* keep compiler quiet */
 		}
 		else
@@ -2475,6 +2526,10 @@ _allocAH(const char *FileSpec, const ArchiveFormat fmt,
 
 		case archDirectory:
 			InitArchiveFmt_Directory(AH);
+			break;
+
+		case archSplit:
+			InitArchiveFmt_Split(AH);
 			break;
 
 		case archTar:
@@ -2679,7 +2734,27 @@ WriteToc(ArchiveHandle *AH)
 			pg_free(defn);
 		}
 		else
-			WriteStr(AH, te->defn);
+		{
+			if (AH->format == archSplit)
+			{
+				/* For split format, special entries need defn in TOC for immediate processing */
+				if (strcmp(te->desc, "ENCODING") == 0 ||
+					strcmp(te->desc, "STDSTRINGS") == 0 ||
+					strcmp(te->desc, "SEARCHPATH") == 0 ||
+					strcmp(te->desc, "DATABASE") == 0)
+				{
+					/* Write defn to TOC for special entries */
+					WriteStr(AH, te->defn);
+				}
+				else
+				{
+					/* For regular entries, defn goes to individual files */
+					WriteStr(AH, "");
+				}
+			}
+			else
+				WriteStr(AH, te->defn);
+		}
 
 		WriteStr(AH, te->dropStmt);
 		WriteStr(AH, te->copyStmt);

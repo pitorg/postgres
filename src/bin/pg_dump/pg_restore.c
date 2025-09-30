@@ -457,6 +457,9 @@ main(int argc, char **argv)
 		else if (pg_strcasecmp(opts->formatName, "d") == 0 ||
 				 pg_strcasecmp(opts->formatName, "directory") == 0)
 			opts->format = archDirectory;
+		else if (pg_strcasecmp(opts->formatName, "s") == 0 ||
+				 pg_strcasecmp(opts->formatName, "split") == 0)
+			opts->format = archSplit;
 		else if (pg_strcasecmp(opts->formatName, "t") == 0 ||
 				 pg_strcasecmp(opts->formatName, "tar") == 0)
 			opts->format = archTar;
@@ -468,7 +471,7 @@ main(int argc, char **argv)
 					 opts->formatName);
 		}
 		else
-			pg_fatal("unrecognized archive format \"%s\"; please specify \"c\", \"d\", or \"t\"",
+			pg_fatal("unrecognized archive format \"%s\"; please specify \"c\", \"d\", \"s\", or \"t\"",
 					 opts->formatName);
 	}
 
@@ -526,7 +529,7 @@ usage(const char *progname)
 	printf(_("\nGeneral options:\n"));
 	printf(_("  -d, --dbname=NAME        connect to database name\n"));
 	printf(_("  -f, --file=FILENAME      output file name (- for stdout)\n"));
-	printf(_("  -F, --format=c|d|t       backup file format (should be automatic)\n"));
+	printf(_("  -F, --format=c|d|s|t     backup file format (should be automatic)\n"));
 	printf(_("  -l, --list               print summarized TOC of the archive\n"));
 	printf(_("  -v, --verbose            verbose mode\n"));
 	printf(_("  -V, --version            output version information, then exit\n"));

@@ -903,11 +903,11 @@ main(int argc, char **argv)
 		pg_fatal("option --restrict-key can only be used with --format=plain");
 
 	/*
-	 * Custom and directory formats are compressed by default with gzip when
+	 * Custom, directory, and split formats are compressed by default with gzip when
 	 * available, not the others.  If gzip is not available, no compression is
 	 * done by default.
 	 */
-	if ((archiveFormat == archCustom || archiveFormat == archDirectory) &&
+	if ((archiveFormat == archCustom || archiveFormat == archDirectory || archiveFormat == archSplit) &&
 		!user_compression_defined)
 	{
 #ifdef HAVE_LIBZ
@@ -1254,8 +1254,8 @@ help(const char *progname)
 
 	printf(_("\nGeneral options:\n"));
 	printf(_("  -f, --file=FILENAME          output file or directory name\n"));
-	printf(_("  -F, --format=c|d|t|p         output file format (custom, directory, tar,\n"
-			 "                               plain text (default))\n"));
+	printf(_("  -F, --format=c|d|s|t|p       output file format (custom, directory, split,\n"
+			 "                               tar, plain text (default))\n"));
 	printf(_("  -j, --jobs=NUM               use this many parallel jobs to dump\n"));
 	printf(_("  -v, --verbose                verbose mode\n"));
 	printf(_("  -V, --version                output version information, then exit\n"));
@@ -1573,6 +1573,10 @@ parseArchiveFormat(const char *format, ArchiveMode *mode)
 		archiveFormat = archDirectory;
 	else if (pg_strcasecmp(format, "directory") == 0)
 		archiveFormat = archDirectory;
+	else if (pg_strcasecmp(format, "s") == 0)
+		archiveFormat = archSplit;
+	else if (pg_strcasecmp(format, "split") == 0)
+		archiveFormat = archSplit;
 	else if (pg_strcasecmp(format, "p") == 0)
 		archiveFormat = archNull;
 	else if (pg_strcasecmp(format, "plain") == 0)
